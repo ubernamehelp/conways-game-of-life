@@ -57,6 +57,9 @@ class App:
         self.paused = True
         self.can_step = False
         self.keybinds_shown = True
+
+        # delta time
+        self.dt = 0
         
         # display caption
         pygame.display.set_caption("Conway's Game Of Life")
@@ -89,9 +92,9 @@ class App:
                     if event.key == pygame.K_f:
                         self.can_step = True
                     if event.key == pygame.K_q:
-                        self.generationsPerSecond = round_to_bound(self.generationsPerSecond-1, 1)
+                        self.generationsPerSecond = round_to_bound((self.generationsPerSecond-10 if pygame.key.get_pressed()[pygame.K_LSHIFT] else self.generationsPerSecond-1), 1) # if shift then -10 otherwise -1
                     if event.key == pygame.K_e:
-                        self.generationsPerSecond = round_to_bound(self.generationsPerSecond+1, 1)
+                        self.generationsPerSecond = round_to_bound((self.generationsPerSecond+10 if pygame.key.get_pressed()[pygame.K_LSHIFT] else self.generationsPerSecond+1), 1) # if shift then +10 otherwise +1
                     if event.key == pygame.K_h:
                         self.keybinds_shown = not self.keybinds_shown
 
@@ -129,13 +132,13 @@ class App:
 
             keys = pygame.key.get_pressed()
             if keys[pygame.K_w]:
-                self.camera.position.y +=1*self.camera.move_speed
+                self.camera.position.y +=round(1*self.camera.move_speed*1+self.dt)
             if keys[pygame.K_s]:
-                self.camera.position.y -=1*self.camera.move_speed
+                self.camera.position.y -=round(1*self.camera.move_speed*1+self.dt)
             if keys[pygame.K_a]:
-                self.camera.position.x -=1*self.camera.move_speed
+                self.camera.position.x -=round(1*self.camera.move_speed*1+self.dt)
             if keys[pygame.K_d]:
-                self.camera.position.x +=1*self.camera.move_speed
+                self.camera.position.x +=round(1*self.camera.move_speed*1+self.dt)
 
             self.screen.fill("black")
 
@@ -152,28 +155,38 @@ class App:
                 else:
                     celldata.update({'deathmarked':False})
 
-                pygame.draw.rect(
-                    self.screen, 
-                    ('red' if celldata.get('deathmarked') else 'white'),
-                    pygame.Rect(
-                        row*CELLWIDTH*self.camera.zoom_level+self.screen.get_width()/2-self.camera.position.x,
-                        column*CELLHEIGHT*self.camera.zoom_level+self.screen.get_height()/2+self.camera.position.y,
-                        CELLWIDTH*self.camera.zoom_level,
-                        CELLHEIGHT*self.camera.zoom_level
+                xlb = self.camera.position.x / CELLWIDTH * self.camera.zoom_level - (self.screen.get_width()/2+CELLWIDTH) / CELLWIDTH*self.camera.zoom_level
+                xub = self.camera.position.x / CELLWIDTH * self.camera.zoom_level + self.screen.get_width()/2 / CELLWIDTH*self.camera.zoom_level
+
+                ylb = self.camera.position.y / CELLHEIGHT * self.camera.zoom_level - self.screen.get_height()/2 / CELLHEIGHT*self.camera.zoom_level
+                yub = self.camera.position.y / CELLHEIGHT * self.camera.zoom_level + (self.screen.get_height()/2+CELLHEIGHT) / CELLHEIGHT*self.camera.zoom_level                
+
+                if xlb < row < xub and ylb < column < yub: # only render inside what cam can see
+
+                    pygame.draw.rect(
+                        self.screen, 
+                        ('red' if celldata.get('deathmarked') else 'white'),
+                        pygame.Rect(
+                            row*CELLWIDTH*self.camera.zoom_level+self.screen.get_width()/2-self.camera.position.x,
+                            column*CELLHEIGHT*self.camera.zoom_level+self.screen.get_height()/2+self.camera.position.y,
+                            CELLWIDTH*self.camera.zoom_level,
+                            CELLHEIGHT*self.camera.zoom_level
+                            )
                         )
-                    )
                 
             # draw informational text:
             cameraText = Text(f"Camera Position: {self.camera.position}\nCamera speed: {self.camera.move_speed}\nCamera zoom: {format(self.camera.zoom_level, '.2f')}", self.screen)
             generationText = Text(f"Generation: {self.generation}\nAlive Cells: {len(self.cells)}\nGenerations Per Second: {self.generationsPerSecond}", self.screen)
+            fpsText = Text(f"FPS:{round(self.clock.get_fps())}", self.screen)
 
             cameraText.render((0,0))
             generationText.render((0, self.screen.get_height()-generationText.textSurface.get_height()))
+            fpsText.render((self.screen.get_width()-fpsText.textSurface.get_width(), 0))
 
             # check if can step
             if (self.paused and not self.can_step) or time.time() < self.lastGenerationTime + 1/self.generationsPerSecond:
                 pygame.display.flip()
-                self.clock.tick(60)
+                self.dt = self.clock.tick(240)/100
                 continue
 
             self.lastGenerationTime = time.time()
@@ -211,8 +224,7 @@ class App:
             
             potentialCellsCount = collections.Counter(potentialCells)
             print(potentialCellsCount)
-            for potentialCell in potentialCellsCount:
-                count = potentialCellsCount.get(potentialCell)
+            for potentialCell, count in potentialCellsCount.items():
                 if count == 3:
                     self.cells.append({'birth':self.generation, 'row':potentialCell[0], 'column':potentialCell[1]})
                     print("newcell:", potentialCell)
@@ -221,7 +233,6 @@ class App:
             for celldata in self.cells:
                 if not celldata.get('deathmarked'):
                     newCells.append(celldata)
-                    print(celldata)
             self.cells = newCells
 
             if len(self.cells) == 0: # reset generation count if cells die out
@@ -229,7 +240,7 @@ class App:
 
             print("-"*50)
             pygame.display.flip()
-            self.clock.tick(60)
+            self.dt = self.clock.tick(240)/100
 
 
         
